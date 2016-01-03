@@ -61,14 +61,6 @@ void printBl999InfoToSerial(BL999Info &info) {
 }
 
 void copyCurrentBl999DataToArray(BL999Info &info) {
-//    bl999_data[info.channel - 1] = {
-//            info.channel,
-//            info.powerUUID,
-//            info.battery,
-//            info.temperature,
-//            info.humidity
-//    };
-
     bl999_data[info.channel - 1].channel = info.channel;
     bl999_data[info.channel - 1].powerUUID = info.powerUUID;
     bl999_data[info.channel - 1].battery = info.battery;
@@ -106,7 +98,9 @@ void postData(BL999Info &info) {
     // Read all the lines of the reply from server and print them to Serial
     while (client.available()) {
         String line = client.readStringUntil('\r');
-        Serial.print(line);
+        if (line.indexOf("Status: ") > -1) {
+            Serial.println(line);
+        }
     }
 
     Serial.println();
@@ -155,6 +149,7 @@ void loop() {
         postAllDatas();
     }
 }
+
 
 
 
