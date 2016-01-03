@@ -2,11 +2,15 @@
 #include <lib_bl999.h>
 
 //WiFi setup
-#define ssid       "............"
-#define password   "..........."
+#define ssid       ".........."
+#define password   ".........."
 
 //Thingspeak setup
-#define thingspeakApiKey ".................."
+String thingspeakApiKeys[] = {
+        "...........",
+        "...........",
+        "..........."
+};
 #define thingSpeakAddress "api.thingspeak.com"
 #define thingSpeakUpdateJsonEndpoint "/update.json"
 #define thingSpeakHttpPort 80
@@ -16,6 +20,7 @@
 static BL999Info current_bl999_data;
 static BL999Info bl999_data[3];
 static unsigned long lastPostTime[3] = {0, 0, 0};
+static boolean hasUnsentData[3] = {false, false, false};
 #define bl999_pin 4
 
 //wifi client
@@ -55,25 +60,42 @@ void printBl999InfoToSerial(BL999Info &info) {
     Serial.println("humidity: " + String(info.humidity));
 }
 
+void copyCurrentBl999DataToArray(BL999Info &info) {
+//    bl999_data[info.channel - 1] = {
+//            info.channel,
+//            info.powerUUID,
+//            info.battery,
+//            info.temperature,
+//            info.humidity
+//    };
+
+    bl999_data[info.channel - 1].channel = info.channel;
+    bl999_data[info.channel - 1].powerUUID = info.powerUUID;
+    bl999_data[info.channel - 1].battery = info.battery;
+    bl999_data[info.channel - 1].temperature = info.temperature;
+    bl999_data[info.channel - 1].humidity = info.humidity;
+}
+
 void postData(BL999Info &info) {
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("WiFi not connected");
+        Serial.println("Can not send data - WiFi not connected");
         return;
     }
 
     if (!client.connect(thingSpeakAddress, thingSpeakHttpPort)) {
-        Serial.println("connection failed");
+        Serial.println("Can not send data - connection failed");
         return;
     }
 
     String postString =
-            "field1=" + String(info.channel) + "&field2=" + String(info.powerUUID) + "&field3=" + String(info.battery) +
-            "&field4=" + String(info.temperature / 10.0) + "&field5=" + String(info.humidity);
+            "field1=" + String(info.battery) +
+            "&field2=" + String(info.temperature / 10.0) +
+            "&field3=" + String(info.humidity);
 
     client.println("POST " + String(thingSpeakUpdateJsonEndpoint) + " HTTP/1.1");
     client.println("Host: " + String(thingSpeakAddress));
     client.println("Connection: close");
-    client.println("X-THINGSPEAKAPIKEY: " + String(thingspeakApiKey));
+    client.println("X-THINGSPEAKAPIKEY: " + String(thingspeakApiKeys[info.channel - 1]));
     client.println("Content-Type: application/x-www-form-urlencoded");
     client.print("Content-Length: " + String(postString.length()));
     client.print("\r\n\r\n");
@@ -84,11 +106,27 @@ void postData(BL999Info &info) {
     // Read all the lines of the reply from server and print them to Serial
     while (client.available()) {
         String line = client.readStringUntil('\r');
-        //Serial.print(line);
+        Serial.print(line);
     }
 
     Serial.println();
     Serial.println("closing connection");
+}
+
+void postAllDatas() {
+    Serial.println("Going to update all channels");
+    for (byte i = 0; i < 3; i++) {
+        if (hasUnsentData[i]) {
+            Serial.println("Channel has unsent data: " + String(i + 1));
+            unsigned long currentTime = millis();
+            if (millis() - lastPostTime[i] > thingSpeakUpdateInterval) {
+                Serial.println("Going to update channel: " + String(bl999_data[i].channel));
+                postData(bl999_data[i]);
+                hasUnsentData[i] = false; //mark it as sent
+                lastPostTime[i] = millis(); //set last sent time
+            }
+        }
+    }
 }
 
 void setup() {
@@ -112,8 +150,12 @@ void loop() {
     //read message to info and if check sum correct - output it to serial port
     if (bl999_get_message(current_bl999_data)) {
         printBl999InfoToSerial(current_bl999_data);
-        postData(current_bl999_data);
+        copyCurrentBl999DataToArray(current_bl999_data);
+        hasUnsentData[current_bl999_data.channel - 1] = true;
+        postAllDatas();
     }
 }
+
+
 
 
