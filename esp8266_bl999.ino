@@ -2,14 +2,14 @@
 #include <lib_bl999.h>
 
 //WiFi setup
-#define ssid       "nord"
-#define password   "asusn18urouter"
+#define ssid       "....."
+#define password   "........"
 
 //Thingspeak setup
 String thingspeakApiKeys[] = {
-        "4X58J49KRXVI4TEI",
-        "30ZBFAA2PF21QQKI",
-        "E2LIX9GG7KQHDLBE"
+        "................",
+        "................",
+        "................"
 };
 #define thingSpeakAddress "api.thingspeak.com"
 #define thingSpeakUpdateJsonEndpoint "/update.json"
