@@ -14,7 +14,10 @@ String thingspeakApiKeys[] = {
 #define thingSpeakAddress "api.thingspeak.com"
 #define thingSpeakUpdateJsonEndpoint "/update.json"
 #define thingSpeakHttpPort 80
-#define thingSpeakUpdateInterval 16000 //16 sec
+//Update data for the specific channel not frequently than 16 sec
+#define thingSpeakUpdateInterval 16000
+//Update data for the specific channel if it's the same not frequently than 5 mins
+#define thingSpeakUpdateSameDataInterval 300000 //5 min
 
 //bl999 setup
 static BL999Info current_bl999_data;
@@ -61,22 +64,46 @@ void printBl999InfoToSerial(BL999Info &info) {
 }
 
 void copyCurrentBl999DataToArray(BL999Info &info) {
+    unsigned long currentTime = millis();
+    //lastPostTime[i]
+
+    if (info.powerUUID == bl999_data[info.channel - 1].powerUUID &&
+            info.battery == bl999_data[info.channel - 1].battery &&
+            info.temperature == bl999_data[info.channel - 1].temperature &&
+            info.humidity == bl999_data[info.channel - 1].humidity &&
+            !hasUnsentData[info.channel - 1]) {
+        //OK we got the same data as it was as was already sent to cloud
+        if (millis() - lastPostTime[info.channel - 1] < thingSpeakUpdateSameDataInterval) {
+            //nothing to do - data is the same as was sent last time
+            //need to wait at least thingSpeakUpdateSameDataInterval millis
+            //to send same data
+            Serial.println("Data for channel ["
+                           + String(info.channel - 1)
+                           + "] Was not changed during last "
+                           + String(thingSpeakUpdateSameDataInterval / (1000 * 60))
+                           + " min. It will not be sent");
+            return;
+        }
+    }
+
     bl999_data[info.channel - 1].channel = info.channel;
     bl999_data[info.channel - 1].powerUUID = info.powerUUID;
     bl999_data[info.channel - 1].battery = info.battery;
     bl999_data[info.channel - 1].temperature = info.temperature;
     bl999_data[info.channel - 1].humidity = info.humidity;
+
+    hasUnsentData[info.channel - 1] = true;
 }
 
-void postData(BL999Info &info) {
+boolean postData(BL999Info &info) {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("Can not send data - WiFi not connected");
-        return;
+        return false;
     }
 
     if (!client.connect(thingSpeakAddress, thingSpeakHttpPort)) {
         Serial.println("Can not send data - connection failed");
-        return;
+        return false;
     }
 
     String postString =
@@ -95,19 +122,27 @@ void postData(BL999Info &info) {
 
     delay(500);
 
+    boolean result = false;
+
     // Read all the lines of the reply from server and print them to Serial
     while (client.available()) {
         String line = client.readStringUntil('\r');
         if (line.indexOf("Status: ") > -1) {
             Serial.println(line);
+            if (line.indexOf("200 OK") > -1) {
+                result = true;
+            }
         }
     }
 
     Serial.println();
     Serial.println("closing connection");
+
+    return result;
 }
 
 void postAllDatas() {
+    Serial.println();
     Serial.println("Going to update all channels");
     for (byte i = 0; i < 3; i++) {
         if (hasUnsentData[i]) {
@@ -115,9 +150,10 @@ void postAllDatas() {
             unsigned long currentTime = millis();
             if (millis() - lastPostTime[i] > thingSpeakUpdateInterval) {
                 Serial.println("Going to update channel: " + String(bl999_data[i].channel));
-                postData(bl999_data[i]);
-                hasUnsentData[i] = false; //mark it as sent
-                lastPostTime[i] = millis(); //set last sent time
+                if (postData(bl999_data[i])) {
+                    hasUnsentData[i] = false; //mark it as sent
+                    lastPostTime[i] = millis(); //set last sent time
+                }
             }
         }
     }
@@ -145,7 +181,6 @@ void loop() {
     if (bl999_get_message(current_bl999_data)) {
         printBl999InfoToSerial(current_bl999_data);
         copyCurrentBl999DataToArray(current_bl999_data);
-        hasUnsentData[current_bl999_data.channel - 1] = true;
         postAllDatas();
     }
 }
