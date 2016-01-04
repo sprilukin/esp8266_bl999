@@ -30,10 +30,70 @@ static boolean hasUnsentData[3] = {false, false, false};
 WiFiClient client;
 byte lastClientStatus = WL_DISCONNECTED;
 
+//Status leds
+#define whiteLed 12
+#define greenLed 13
+#define redLed 14
+
+// === LED secion
+void turnLedOn(byte pin) {
+    digitalWrite(pin, HIGH);
+}
+
+void turnLedOff(byte pin) {
+    digitalWrite(pin, LOW);
+}
+
+void setAllLedsState(byte white, byte green, byte red) {
+    if (white == 1)  {
+        turnLedOn(whiteLed);
+    } else if (white == 0) {
+        turnLedOff(whiteLed);
+    }
+    if (green == 1)  {
+        turnLedOn(greenLed);
+    } else if (green == 0) {
+        turnLedOff(greenLed);
+    }
+    if (red == 1)  {
+        turnLedOn(redLed);
+    } else if (red == 0) {
+        turnLedOff(redLed);
+    }
+}
+
+void turnWifiInProgressLedState() {
+    setAllLedsState(1, 1, 1);
+}
+
+void turnWifiOkLedState() {
+    setAllLedsState(1, 0, 0);
+}
+
+void turnWifiErrorLedState() {
+    setAllLedsState(0, 0, 1);
+}
+
+void turnSendInProgressState() {
+    setAllLedsState(2, 0, 2);
+}
+
+void turnLastSendOkState() {
+    setAllLedsState(2, 1, 0);
+}
+
+void turnLastSendErrorState() {
+    setAllLedsState(2, 0, 1);
+}
+
+// === wifi section
 void setupWifi() {
     byte status = WiFi.status();
 
     if (status == WL_DISCONNECTED || status == WL_CONNECTION_LOST) {
+
+        turnWifiInProgressLedState();
+
         WiFi.begin(ssid, password);
 
         while (WiFi.status() == WL_DISCONNECTED) {
@@ -46,14 +106,17 @@ void setupWifi() {
             Serial.println("WiFi connected");
             Serial.println("IP address: ");
             Serial.println(WiFi.localIP());
+            turnWifiOkLedState();
         } else {
             Serial.println("");
             Serial.println("WiFi connection failed");
             Serial.println("Reason: " + String(WiFi.status()));
+            turnWifiErrorLedState();
         }
     }
 }
 
+// === BL999 section
 void printBl999InfoToSerial(BL999Info &info) {
     Serial.println("====== Got message: ");
     Serial.println("Channel: " + String(info.channel));
@@ -68,10 +131,10 @@ void copyCurrentBl999DataToArray(BL999Info &info) {
     //lastPostTime[i]
 
     if (info.powerUUID == bl999_data[info.channel - 1].powerUUID &&
-            info.battery == bl999_data[info.channel - 1].battery &&
-            info.temperature == bl999_data[info.channel - 1].temperature &&
-            info.humidity == bl999_data[info.channel - 1].humidity &&
-            !hasUnsentData[info.channel - 1]) {
+        info.battery == bl999_data[info.channel - 1].battery &&
+        info.temperature == bl999_data[info.channel - 1].temperature &&
+        info.humidity == bl999_data[info.channel - 1].humidity &&
+        !hasUnsentData[info.channel - 1]) {
         //OK we got the same data as it was as was already sent to cloud
         if (millis() - lastPostTime[info.channel - 1] < thingSpeakUpdateSameDataInterval) {
             //nothing to do - data is the same as was sent last time
@@ -95,6 +158,7 @@ void copyCurrentBl999DataToArray(BL999Info &info) {
     hasUnsentData[info.channel - 1] = true;
 }
 
+// === thingspeak section
 boolean postData(BL999Info &info) {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("Can not send data - WiFi not connected");
@@ -150,9 +214,13 @@ void postAllDatas() {
             unsigned long currentTime = millis();
             if (millis() - lastPostTime[i] > thingSpeakUpdateInterval) {
                 Serial.println("Going to update channel: " + String(bl999_data[i].channel));
+                turnSendInProgressState();
                 if (postData(bl999_data[i])) {
                     hasUnsentData[i] = false; //mark it as sent
                     lastPostTime[i] = millis(); //set last sent time
+                    turnLastSendOkState();
+                } else {
+                    turnLastSendErrorState();
                 }
             }
         }
@@ -161,6 +229,10 @@ void postAllDatas() {
 
 void setup() {
     Serial.begin(115200);
+
+    pinMode(whiteLed, OUTPUT);
+    pinMode(greenLed, OUTPUT);
+    pinMode(redLed, OUTPUT);
 
     //set digital pin to read info from
     bl999_set_rx_pin(bl999_pin);
