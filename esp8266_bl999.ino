@@ -2,14 +2,14 @@
 #include <lib_bl999.h>
 
 //WiFi setup
-#define ssid       ".........."
-#define password   ".........."
+#define ssid       "nord"
+#define password   "asusn18urouter"
 
 //Thingspeak setup
 String thingspeakApiKeys[] = {
-        "...........",
-        "...........",
-        "..........."
+        "4X58J49KRXVI4TEI",
+        "30ZBFAA2PF21QQKI",
+        "E2LIX9GG7KQHDLBE"
 };
 #define thingSpeakAddress "api.thingspeak.com"
 #define thingSpeakUpdateJsonEndpoint "/update.json"
@@ -78,7 +78,7 @@ void copyCurrentBl999DataToArray(BL999Info &info) {
             //need to wait at least thingSpeakUpdateSameDataInterval millis
             //to send same data
             Serial.println("Data for channel ["
-                           + String(info.channel - 1)
+                           + String(info.channel)
                            + "] Was not changed during last "
                            + String(thingSpeakUpdateSameDataInterval / (1000 * 60))
                            + " min. It will not be sent");
@@ -184,8 +184,4 @@ void loop() {
         postAllDatas();
     }
 }
-
-
-
-
 
